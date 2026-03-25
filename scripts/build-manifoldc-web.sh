@@ -72,22 +72,47 @@ echo "=========================================="
 echo "Build complete!"
 echo "=========================================="
 
-# Verify the library was created and copy to libs
+# Verify the library was created
 LIB_PATH=$(find "$BUILD_DIR" -name "libmanifoldc.a" | head -1)
-if [ -n "$LIB_PATH" ]; then
-    echo "✓ Successfully built libmanifoldc.a"
-    ls -lh "$LIB_PATH"
-
-    if [ "$BUILD_TYPE" = "Debug" ]; then
-        OUTPUT_DIR="$MANIFOLD_DIR/libs/emscripten/x86/debug"
-    else
-        OUTPUT_DIR="$MANIFOLD_DIR/libs/emscripten/x86/release"
-    fi
-
-    mkdir -p "$OUTPUT_DIR"
-    cp "$LIB_PATH" "$OUTPUT_DIR/manifoldc.a"
-    echo "✓ Copied to $OUTPUT_DIR/manifoldc.a"
-else
-    echo "✗ Failed to build manifoldc.a"
+if [ -z "$LIB_PATH" ]; then
+    echo "✗ Failed to build libmanifoldc.a"
     exit 1
 fi
+echo "✓ Successfully built libmanifoldc.a"
+ls -lh "$LIB_PATH"
+
+if [ "$BUILD_TYPE" = "Debug" ]; then
+    OUTPUT_DIR="$MANIFOLD_DIR/libs/emscripten/x86/debug"
+else
+    OUTPUT_DIR="$MANIFOLD_DIR/libs/emscripten/x86/release"
+fi
+mkdir -p "$OUTPUT_DIR"
+
+# Merge all dependency archives into a single self-contained fat archive.
+# A static .a does not embed its transitive dependencies the way a .dylib/.so
+# does, so we must combine libmanifoldc.a + libmanifold.a + libClipper2.a here.
+echo "Merging all archives into a single fat manifoldc.a..."
+MANIFOLDC_A=$(find "$BUILD_DIR" -name "libmanifoldc.a" | head -1)
+MANIFOLD_A=$(find  "$BUILD_DIR" -name "libmanifold.a"  | head -1)
+CLIPPER2_A=$(find  "$BUILD_DIR" -name "libClipper2.a" -o -name "libclipper2.a" 2>/dev/null | head -1)
+
+echo "  manifoldc : $MANIFOLDC_A"
+echo "  manifold  : $MANIFOLD_A"
+echo "  Clipper2  : ${CLIPPER2_A:-(not found, optional)}"
+
+FAT_OUTPUT="$OUTPUT_DIR/manifoldc.a"
+MRI_SCRIPT=$(mktemp /tmp/manifold_merge_XXXXXX.mri)
+{
+    echo "CREATE $FAT_OUTPUT"
+    echo "ADDLIB $MANIFOLDC_A"
+    [ -n "$MANIFOLD_A"  ] && echo "ADDLIB $MANIFOLD_A"
+    [ -n "$CLIPPER2_A"  ] && echo "ADDLIB $CLIPPER2_A"
+    echo "SAVE"
+    echo "END"
+} > "$MRI_SCRIPT"
+
+emar -M < "$MRI_SCRIPT"
+rm -f "$MRI_SCRIPT"
+
+echo "✓ Fat archive created at $FAT_OUTPUT"
+ls -lh "$FAT_OUTPUT"
