@@ -19,25 +19,30 @@ echo "Build Type: $BUILD_TYPE"
 echo "Emscripten Version: $EMSCRIPTEN_VERSION"
 echo "=========================================="
 
-# Path to local emsdk
-EMSDK_PATH="$SOKOL_NET_ROOT/tools/emsdk/emsdk"
+# Use system emcc if already available (e.g. CI with setup-emsdk action),
+# otherwise fall back to the local emsdk submodule.
+if command -v emcc &>/dev/null; then
+    echo "Using system Emscripten: $(emcc --version | head -n 1)"
+else
+    EMSDK_PATH="$SOKOL_NET_ROOT/tools/emsdk/emsdk"
 
-if [ ! -f "$EMSDK_PATH" ]; then
-    echo "Error: Local emsdk not found at $EMSDK_PATH"
-    echo "Please ensure the submodule is initialized: git submodule update --init --recursive"
-    exit 1
+    if [ ! -f "$EMSDK_PATH" ]; then
+        echo "Error: Local emsdk not found at $EMSDK_PATH"
+        echo "Please ensure the submodule is initialized: git submodule update --init --recursive"
+        exit 1
+    fi
+
+    chmod +x "$EMSDK_PATH"
+
+    echo "Installing Emscripten SDK version $EMSCRIPTEN_VERSION..."
+    "$EMSDK_PATH" install "$EMSCRIPTEN_VERSION"
+
+    echo "Activating Emscripten SDK version $EMSCRIPTEN_VERSION..."
+    "$EMSDK_PATH" activate "$EMSCRIPTEN_VERSION"
+
+    echo "Setting up Emscripten environment..."
+    source "$SOKOL_NET_ROOT/tools/emsdk/emsdk_env.sh"
 fi
-
-chmod +x "$EMSDK_PATH"
-
-echo "Installing Emscripten SDK version $EMSCRIPTEN_VERSION..."
-"$EMSDK_PATH" install "$EMSCRIPTEN_VERSION"
-
-echo "Activating Emscripten SDK version $EMSCRIPTEN_VERSION..."
-"$EMSDK_PATH" activate "$EMSCRIPTEN_VERSION"
-
-echo "Setting up Emscripten environment..."
-source "$SOKOL_NET_ROOT/tools/emsdk/emsdk_env.sh"
 
 echo "Using Emscripten: $(emcc --version | head -n 1)"
 
