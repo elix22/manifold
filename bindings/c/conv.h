@@ -74,7 +74,7 @@ std::vector<T> vector_of_array(T* ts, size_t length) {
 }
 
 template <typename T>
-T* copy_data(void* mem, std::vector<T> v) {
+T* copy_data(void* mem, const std::vector<T>& v) {
   T* ts = reinterpret_cast<T*>(mem);
   memcpy(ts, v.data(), sizeof(T) * v.size());
   return ts;
