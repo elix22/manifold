@@ -57,7 +57,9 @@ set(
 # Include directories
 set(MANIFOLD_INCLUDE_DIRS ${PROJECT_SOURCE_DIR}/include)
 
-add_library(manifold ${MANIFOLD_SRCS} ${MANIFOLD_PRIVATE_HDRS})
+# Always build manifold core as STATIC so it gets embedded into libmanifoldc
+# (the shared C-binding library), producing a single deployable library.
+add_library(manifold STATIC ${MANIFOLD_SRCS} ${MANIFOLD_PRIVATE_HDRS})
 
 target_link_libraries(manifold PUBLIC $<$<BOOL:${TRACY_ENABLE}>:TracyClient>)
 

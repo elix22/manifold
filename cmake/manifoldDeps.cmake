@@ -128,7 +128,12 @@ if(MANIFOLD_CROSS_SECTION)
       SOURCE_SUBDIR
       CPP
     )
+    # Force Clipper2 to build as STATIC even when BUILD_SHARED_LIBS=ON,
+    # so it gets embedded into libmanifoldc (the single deployable shared lib).
+    set(_bsl_save ${BUILD_SHARED_LIBS})
+    set(BUILD_SHARED_LIBS OFF)
     FetchContent_MakeAvailable(Clipper2)
+    set(BUILD_SHARED_LIBS ${_bsl_save})
     set_property(
       DIRECTORY ${clipper2_SOURCE_DIR}/CPP
       PROPERTY EXCLUDE_FROM_ALL ${BUILD_SHARED_LIBS}
