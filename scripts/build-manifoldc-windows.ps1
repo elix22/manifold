@@ -62,6 +62,17 @@ $DllPath = Get-ChildItem -Path $BuildDir -Recurse -Filter "manifoldc.dll" | Sele
 if ($null -ne $DllPath) {
     Write-Host "✓ Successfully built manifoldc.dll" -ForegroundColor Green
     Get-Item $DllPath.FullName | Format-Table Name, Length, LastWriteTime
+
+    # Copy to the expected location
+    if ($BuildType -eq "Debug") {
+        $OutputDir = Join-Path $ManifoldDir "libs\windows\$Architecture\debug"
+    } else {
+        $OutputDir = Join-Path $ManifoldDir "libs\windows\$Architecture\release"
+    }
+
+    New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
+    Copy-Item $DllPath.FullName $OutputDir -Force
+    Write-Host "✓ Copied to $OutputDir\manifoldc.dll" -ForegroundColor Green
 } else {
     Write-Host "✗ Failed to build manifoldc.dll" -ForegroundColor Red
     exit 1
