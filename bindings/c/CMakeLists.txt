@@ -38,7 +38,21 @@ target_include_directories(
 )
 target_compile_options(manifoldc PRIVATE ${MANIFOLD_FLAGS})
 
-install(TARGETS manifoldc EXPORT manifoldTargets)
+# iOS Framework creation
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  set_target_properties(manifoldc PROPERTIES
+    FRAMEWORK TRUE
+    FRAMEWORK_VERSION A
+    MACOSX_FRAMEWORK_IDENTIFIER org.manifold.manifoldc
+    MACOSX_FRAMEWORK_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist"
+    XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET "13.0"
+    PUBLIC_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/include/manifold/manifoldc.h;${CMAKE_CURRENT_SOURCE_DIR}/include/manifold/types.h"
+  )
+endif()
+
+install(TARGETS manifoldc EXPORT manifoldTargets
+  FRAMEWORK DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
 install(
   FILES include/manifold/manifoldc.h include/manifold/types.h
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/manifold

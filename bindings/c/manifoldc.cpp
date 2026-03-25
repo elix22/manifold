@@ -23,6 +23,7 @@
 #include "manifold/manifold.h"
 #include "manifold/polygon.h"
 #include "manifold/types.h"
+#include "manifoldc_csharp_internal_wrappers.h"
 
 using namespace manifold;
 
