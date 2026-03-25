@@ -3,19 +3,8 @@ name: Build Manifold Libraries
 on:
   push:
     branches: [ sokol-dev ]
-    paths:
-      - 'src/**'
-      - 'include/**'
-      - 'CMakeLists.txt'
-      - 'scripts/**'
-      - '.github/workflows/build-libs.yml'
   pull_request:
     branches: [ sokol-dev ]
-    paths:
-      - 'src/**'
-      - 'include/**'
-      - 'CMakeLists.txt'
-      - 'scripts/**'
   workflow_dispatch:  # Allow manual triggering
 
 permissions:
