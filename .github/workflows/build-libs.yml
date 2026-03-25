@@ -38,11 +38,8 @@ jobs:
         retention-days: 30
 
   build-macos:
-    name: Build macOS (${{ matrix.arch }})
+    name: Build macOS (arm64 + x86_64)
     runs-on: macos-latest
-    strategy:
-      matrix:
-        arch: [arm64, x86_64]
 
     steps:
     - name: Checkout repository
@@ -57,12 +54,14 @@ jobs:
       run: |
         cd scripts
         chmod +x build-manifoldc-macos.sh
-        ./build-manifoldc-macos.sh ${{ matrix.arch }}
+        # Pass "Release" explicitly — $1 is BUILD_TYPE, not arch.
+        # The script builds both arm64 and x86_64 internally.
+        ./build-manifoldc-macos.sh Release
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: macos-${{ matrix.arch }}
+        name: macos-all
         path: libs/macos/**/*
         retention-days: 30
 
@@ -224,12 +223,9 @@ jobs:
           cp -r artifacts/windows-x64/* combined-libs/windows/ || true
         fi
 
-        # Copy macOS artifacts (both arm64 and x86_64)
-        if [ -d "artifacts/macos-arm64" ]; then
-          cp -r artifacts/macos-arm64/* combined-libs/macos/ || true
-        fi
-        if [ -d "artifacts/macos-x86_64" ]; then
-          cp -r artifacts/macos-x86_64/* combined-libs/macos/ || true
+        # Copy macOS artifacts (arm64 and x86_64 built together in one job)
+        if [ -d "artifacts/macos-all" ]; then
+          cp -r artifacts/macos-all/* combined-libs/macos/ || true
         fi
 
         # Copy Linux artifacts
