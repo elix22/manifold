@@ -19,10 +19,23 @@ echo "Build Type: $BUILD_TYPE"
 echo "Emscripten Version: $EMSCRIPTEN_VERSION"
 echo "=========================================="
 
-# Use system emcc if already available (e.g. CI with setup-emsdk action),
-# otherwise fall back to the local emsdk submodule.
+# Use system emcc only if it matches the required version (e.g. CI with
+# setup-emsdk action that pins the exact version). Otherwise fall back to
+# the local emsdk submodule so we always compile with the version the
+# .NET SDK workload expects, avoiding wasm-opt feature-flag mismatches.
+SYSTEM_EMCC_OK=false
 if command -v emcc &>/dev/null; then
-    echo "Using system Emscripten: $(emcc --version | head -n 1)"
+    SYSTEM_EMCC_VERSION=$(emcc --version 2>/dev/null | head -n 1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
+    if [ "$SYSTEM_EMCC_VERSION" = "$EMSCRIPTEN_VERSION" ]; then
+        echo "Using system Emscripten: $(emcc --version | head -n 1)"
+        SYSTEM_EMCC_OK=true
+    else
+        echo "System emcc version $SYSTEM_EMCC_VERSION does not match required $EMSCRIPTEN_VERSION — using local emsdk."
+    fi
+fi
+
+if $SYSTEM_EMCC_OK; then
+    : # nothing to do, emcc is already set up
 else
     EMSDK_PATH="$SOKOL_NET_ROOT/tools/emsdk/emsdk"
 

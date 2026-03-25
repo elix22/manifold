@@ -513,19 +513,6 @@ public static extern IntPtr manifold_transform(void* mem, IntPtr m, double x1, d
 #endif
 public static extern IntPtr manifold_mirror(void* mem, IntPtr m, double nx, double ny, double nz);
 
-#if WEB
-[DllImport("manifoldc", EntryPoint = "manifold_warp", CallingConvention = CallingConvention.Cdecl)]
-private static extern IntPtr manifold_warp_native(void* mem, IntPtr m, IntPtr fun, void* ctx);
-public static IntPtr manifold_warp(void* mem, IntPtr m, delegate* unmanaged<double, double, double, void*, ManifoldVec3> fun, void* ctx) => manifold_warp_native(mem, m, (IntPtr)fun, ctx);
-#else
-#if __IOS__
-[DllImport("@rpath/manifoldc.framework/manifoldc", EntryPoint = "manifold_warp", CallingConvention = CallingConvention.Cdecl)]
-#else
-[DllImport("manifoldc", EntryPoint = "manifold_warp", CallingConvention = CallingConvention.Cdecl)]
-#endif
-public static extern IntPtr manifold_warp(void* mem, IntPtr m, delegate* unmanaged<double, double, double, void*, ManifoldVec3> fun, void* ctx);
-#endif
-
 #if __IOS__
 [DllImport("@rpath/manifoldc.framework/manifoldc", EntryPoint = "manifold_smooth_by_normals", CallingConvention = CallingConvention.Cdecl)]
 #else

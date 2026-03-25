@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+enable_language(C)
+
 include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -25,6 +27,7 @@ add_library(
   box.cpp
   cross.cpp
   rect.cpp
+  manifoldc_csharp_extensions.c
 )
 exportlib(manifoldc)
 
