@@ -190,6 +190,7 @@ namespace Manifold
             IntPtr h  = Handle;
             Handle    = IntPtr.Zero;
             _disposed = true;
+            GC.SuppressFinalize(this);
             return h;
         }
 
@@ -197,14 +198,23 @@ namespace Manifold
 
         public void Dispose()
         {
-            if (!_disposed && Handle != IntPtr.Zero)
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        private void Dispose(bool disposing)
+        {
+            if (!_disposed)
             {
-                manifold_delete_manifold(Handle);
-                Handle    = IntPtr.Zero;
+                if (Handle != IntPtr.Zero)
+                {
+                    manifold_delete_manifold(Handle);
+                    Handle = IntPtr.Zero;
+                }
                 _disposed = true;
             }
         }
 
-        ~MfManifold() => Dispose();
+        ~MfManifold() => Dispose(false);
     }
 }

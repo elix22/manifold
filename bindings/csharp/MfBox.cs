@@ -70,14 +70,23 @@ namespace Manifold
 
         public void Dispose()
         {
-            if (!_disposed && Handle != IntPtr.Zero)
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        private void Dispose(bool disposing)
+        {
+            if (!_disposed)
             {
-                manifold_delete_box(Handle);
-                Handle    = IntPtr.Zero;
+                if (Handle != IntPtr.Zero)
+                {
+                    manifold_delete_box(Handle);
+                    Handle = IntPtr.Zero;
+                }
                 _disposed = true;
             }
         }
 
-        ~MfBox() => Dispose();
+        ~MfBox() => Dispose(false);
     }
 }
