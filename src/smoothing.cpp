@@ -37,10 +37,15 @@ double Wrap(double radians) {
                          : radians;
 }
 
+// Minimum sharp angle in degrees, below which edges are considered coplanar.
+// Floating point noise in the dihedral angle computation can reach ~1e-6
+// degrees for nearly-parallel face normals; this threshold must exceed that.
+constexpr double kMinSharpAngle = 1e-4;
+
 // Get the angle between two unit-vectors.
 double AngleBetween(vec3 a, vec3 b) {
   const double dot = la::dot(a, b);
-  return dot >= 1 ? 0 : (dot <= -1 ? kPi : la::acos(dot));
+  return dot >= 1 ? 0 : (dot <= -1 ? kPi : math::acos(dot));
 }
 
 // Calculate a tangent vector in the form of a weighted cubic Bezier taking as
@@ -118,9 +123,9 @@ struct InterpTri {
     if (std::abs(cosTheta) > 1.0 - std::numeric_limits<double>::epsilon()) {
       return la::lerp(x, z, a);  // for numerical stability
     } else {
-      double angle = std::acos(cosTheta);
-      return (std::sin((1.0 - a) * angle) * x + std::sin(a * angle) * z) /
-             std::sin(angle);
+      double angle = math::acos(cosTheta);
+      return (math::sin((1.0 - a) * angle) * x + math::sin(a * angle) * z) /
+             math::sin(angle);
     }
   }
 
@@ -256,12 +261,17 @@ namespace manifold {
  * normalIdx shows the beginning of where normals are stored in the properties.
  */
 vec3 Manifold::Impl::GetNormal(int halfedge, int normalIdx) const {
+  const int meshID = meshRelation_.triRef[halfedge / 3].meshID;
+
+  const mat3 transform =
+      meshRelation_.meshIDtransform.find(meshID)->second.GetNormalTransform();
+
   const int prop = halfedge_[halfedge].propVert;
   vec3 normal;
   for (const int i : {0, 1, 2}) {
     normal[i] = properties_[prop * numProp_ + normalIdx + i];
   }
-  return normal;
+  return transform * normal;
 }
 
 /**
@@ -403,12 +413,13 @@ Vec<int> Manifold::Impl::VertHalfedge() const {
 std::vector<Smoothness> Manifold::Impl::SharpenEdges(
     double minSharpAngle, double minSmoothness) const {
   std::vector<Smoothness> sharpenedEdges;
+  minSharpAngle = std::max(minSharpAngle, kMinSharpAngle);
   const double minRadians = radians(minSharpAngle);
   for (size_t e = 0; e < halfedge_.size(); ++e) {
     if (!halfedge_[e].IsForward()) continue;
     const size_t pair = halfedge_[e].pairedHalfedge;
     const double dihedral =
-        std::acos(la::dot(faceNormal_[e / 3], faceNormal_[pair / 3]));
+        AngleBetween(faceNormal_[e / 3], faceNormal_[pair / 3]);
     if (dihedral > minRadians) {
       sharpenedEdges.push_back({e, minSmoothness});
       sharpenedEdges.push_back({pair, minSmoothness});
@@ -436,6 +447,9 @@ void Manifold::Impl::SharpenTangent(int halfedge, double smoothness) {
 void Manifold::Impl::SetNormals(int normalIdx, double minSharpAngle) {
   if (IsEmpty()) return;
   if (normalIdx < 0) return;
+  // Ensure minSharpAngle is large enough to avoid treating nearly-coplanar
+  // faces as sharp due to floating point noise in the dihedral computation.
+  minSharpAngle = std::max(minSharpAngle, kMinSharpAngle);
   halfedge_.MakeUnique();
 
   const int oldNumProp = NumProp();
@@ -449,7 +463,7 @@ void Manifold::Impl::SetNormals(int normalIdx, double minSharpAngle) {
     const int tri1 = e / 3;
     const int tri2 = pair / 3;
     const double dihedral =
-        degrees(std::acos(la::dot(faceNormal_[tri1], faceNormal_[tri2])));
+        degrees(AngleBetween(faceNormal_[tri1], faceNormal_[tri2]));
     if (dihedral > minSharpAngle) {
       ++vertNumSharp[halfedge_[e].startVert];
       ++vertNumSharp[halfedge_[e].endVert];
@@ -479,15 +493,24 @@ void Manifold::Impl::SetNormals(int normalIdx, double minSharpAngle) {
                halfedge_[i].propVert = -1;
              });
 
+  std::map<int, mat3> meshIDtoNormalTransform;
+
   const int numEdge = halfedge_.size();
   for (int startEdge = 0; startEdge < numEdge; ++startEdge) {
     if (halfedge_[startEdge].propVert >= 0) continue;
     const int vert = halfedge_[startEdge].startVert;
 
+    const int meshID = meshRelation_.triRef[startEdge / 3].meshID;
+    if (meshIDtoNormalTransform.find(meshID) == meshIDtoNormalTransform.end()) {
+      meshIDtoNormalTransform[meshID] =
+          meshRelation_.meshIDtransform[meshID].GetInverseNormalTransform();
+    }
+    const mat3 transform = meshIDtoNormalTransform[meshID];
+
     if (vertNumSharp[vert] < 2) {  // vertex has single normal
-      const vec3 normal = vertFlatFace[vert] >= 0
-                              ? faceNormal_[vertFlatFace[vert]]
-                              : vertNormal_[vert];
+      const vec3 normal =
+          transform * (vertFlatFace[vert] >= 0 ? faceNormal_[vertFlatFace[vert]]
+                                               : vertNormal_[vert]);
       int lastProp = -1;
       ForVert(startEdge, [&](int current) {
         const int prop = oldHalfedgeProp[current];
@@ -514,8 +537,8 @@ void Manifold::Impl::SetNormals(int normalIdx, double minSharpAngle) {
         int next = NextHalfedge(halfedge_[current].pairedHalfedge);
         const int face = next / 3;
 
-        const double dihedral = degrees(
-            std::acos(la::dot(faceNormal_[face], faceNormal_[prevFace])));
+        const double dihedral =
+            degrees(AngleBetween(faceNormal_[face], faceNormal_[prevFace]));
         if (dihedral > minSharpAngle ||
             triIsFlatFace[face] != triIsFlatFace[prevFace] ||
             (triIsFlatFace[face] && triIsFlatFace[prevFace] &&
@@ -559,8 +582,8 @@ void Manifold::Impl::SetNormals(int normalIdx, double minSharpAngle) {
           },
           [this, &triIsFlatFace, &normals, &group, minSharpAngle](
               int, const FaceEdge& here, FaceEdge& next) {
-            const double dihedral = degrees(std::acos(
-                la::dot(faceNormal_[here.face], faceNormal_[next.face])));
+            const double dihedral = degrees(
+                AngleBetween(faceNormal_[here.face], faceNormal_[next.face]));
             if (dihedral > minSharpAngle ||
                 triIsFlatFace[here.face] != triIsFlatFace[next.face] ||
                 (triIsFlatFace[here.face] && triIsFlatFace[next.face] &&
@@ -579,7 +602,7 @@ void Manifold::Impl::SetNormals(int normalIdx, double minSharpAngle) {
           });
 
       for (auto& normal : normals) {
-        normal = SafeNormalize(normal);
+        normal = transform * SafeNormalize(normal);
       }
 
       int lastGroup = 0;
