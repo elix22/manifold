@@ -22,16 +22,21 @@ enable_testing()
 set(
   SOURCE_FILES
   test_main.cpp
+  utils_test.cpp
   polygon_test.cpp
   properties_test.cpp
   manifold_test.cpp
+  context_test.cpp
+  measurement_test.cpp
   boolean_test.cpp
   sdf_test.cpp
   smooth_test.cpp
   hull_test.cpp
   samples_test.cpp
   boolean_complex_test.cpp
-  $<$<BOOL:${MANIFOLD_CROSS_SECTION}>:cross_section_test.cpp>
+  cross_section_test.cpp
+  cross_section_complex_test.cpp
+  cross_section_offset_corpus_test.cpp
   $<$<BOOL:${MANIFOLD_CBIND}>:manifoldc_test.cpp>
 )
 

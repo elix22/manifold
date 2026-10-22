@@ -37,6 +37,14 @@ ManifoldCrossSectionVec* to_c(CrossSectionVec* csv) {
   return reinterpret_cast<ManifoldCrossSectionVec*>(csv);
 }
 
+ManifoldRayHitVec* to_c(RayHitVec* v) {
+  return reinterpret_cast<ManifoldRayHitVec*>(v);
+}
+
+ManifoldExecutionContext* to_c(ExecutionContext* ctx) {
+  return reinterpret_cast<ManifoldExecutionContext*>(ctx);
+}
+
 ManifoldSimplePolygon* to_c(manifold::SimplePolygon* m) {
   return reinterpret_cast<ManifoldSimplePolygon*>(m);
 }
@@ -109,6 +117,12 @@ ManifoldError to_c(manifold::Manifold::Error error) {
     case Manifold::Error::ResultTooLarge:
       e = MANIFOLD_RESULT_TOO_LARGE;
       break;
+    case Manifold::Error::InvalidTangents:
+      e = MANIFOLD_INVALID_TANGENTS;
+      break;
+    case Manifold::Error::Cancelled:
+      e = MANIFOLD_CANCELLED;
+      break;
   };
   return e;
 }
@@ -147,6 +161,14 @@ CrossSectionVec* from_c(ManifoldCrossSectionVec* csv) {
   return reinterpret_cast<CrossSectionVec*>(csv);
 }
 
+RayHitVec* from_c(ManifoldRayHitVec* v) {
+  return reinterpret_cast<RayHitVec*>(v);
+}
+
+ExecutionContext* from_c(ManifoldExecutionContext* ctx) {
+  return reinterpret_cast<ExecutionContext*>(ctx);
+}
+
 manifold::SimplePolygon* from_c(ManifoldSimplePolygon* m) {
   return reinterpret_cast<manifold::SimplePolygon*>(m);
 }
@@ -176,24 +198,6 @@ OpType from_c(ManifoldOpType optype) {
       break;
   };
   return op;
-}
-
-CrossSection::FillRule from_c(ManifoldFillRule fillrule) {
-  auto fr = CrossSection::FillRule::EvenOdd;
-  switch (fillrule) {
-    case MANIFOLD_FILL_RULE_EVEN_ODD:
-      break;
-    case MANIFOLD_FILL_RULE_NON_ZERO:
-      fr = CrossSection::FillRule::NonZero;
-      break;
-    case MANIFOLD_FILL_RULE_POSITIVE:
-      fr = CrossSection::FillRule::Positive;
-      break;
-    case MANIFOLD_FILL_RULE_NEGATIVE:
-      fr = CrossSection::FillRule::Negative;
-      break;
-  };
-  return fr;
 }
 
 CrossSection::JoinType from_c(ManifoldJoinType join_type) {

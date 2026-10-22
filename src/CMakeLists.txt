@@ -14,11 +14,18 @@
 
 set(
   MANIFOLD_SRCS
+  boolean2.cpp
+  boolean2_diagnostics.cpp
+  boolean2_offset.cpp
+  boolean2_predicates.cpp
+  boolean2_sweep.cpp
   boolean3.cpp
   boolean_result.cpp
   constructors.cpp
+  cross_section.cpp
   csg_tree.cpp
   edge_op.cpp
+  execution_impl.cpp
   face_op.cpp
   impl.cpp
   manifold.cpp
@@ -31,20 +38,23 @@ set(
   sort.cpp
   subdivision.cpp
   tree2d.cpp
-  # optional source files
-  $<$<BOOL:${MANIFOLD_CROSS_SECTION}>:cross_section/cross_section.cpp>
 )
 
 set(
   MANIFOLD_PRIVATE_HDRS
+  atomic_compat.h
+  boolean2.h
+  boolean2_diagnostics.h
   boolean3.h
   collider.h
   csg_tree.h
+  execution_impl.h
   hashtable.h
   impl.h
   iters.h
   mesh_fixes.h
   parallel.h
+  polygon_internal.h
   quickhull.h
   shared.h
   svd.h
@@ -66,7 +76,6 @@ target_link_libraries(
   PRIVATE
     # optional dependencies
     $<$<BOOL:${MANIFOLD_PAR}>:TBB::tbb>
-    $<$<BOOL:${MANIFOLD_CROSS_SECTION}>:Clipper2::Clipper2>
 )
 
 target_compile_options(manifold PRIVATE ${MANIFOLD_FLAGS})
@@ -76,19 +85,30 @@ set(
   OPTIONS
   MANIFOLD_DEBUG
   MANIFOLD_ASSERT
-  MANIFOLD_CROSS_SECTION
+  MANIFOLD_TIMING
+  MANIFOLD_NO_IOSTREAM
   TRACY_ENABLE
   TRACY_MEMORY_USAGE
 )
 foreach(OPT IN LISTS OPTIONS)
   if(${${OPT}})
-    target_compile_options(manifold PUBLIC -D${OPT})
+    target_compile_definitions(manifold PUBLIC ${OPT})
   endif()
 endforeach()
 if(MANIFOLD_PAR)
-  target_compile_options(manifold PUBLIC -DMANIFOLD_PAR=1)
+  target_compile_definitions(manifold PUBLIC MANIFOLD_PAR=1)
 else()
-  target_compile_options(manifold PUBLIC -DMANIFOLD_PAR=-1)
+  target_compile_definitions(manifold PUBLIC MANIFOLD_PAR=-1)
+endif()
+
+# MANIFOLD_NO_IOSTREAM also defines MANIFOLD_NO_FILESYSTEM (the two
+# track together in practice — `<filesystem>` paths are only useful
+# if you can `<fstream>` them, which needs iostream). Source code
+# uses the macros separately for semantic clarity (NO_IOSTREAM gates
+# the iostream-using public API; NO_FILESYSTEM gates filesystem use
+# in test_main.cpp's fixture helpers + main()).
+if(MANIFOLD_NO_IOSTREAM)
+  target_compile_definitions(manifold PUBLIC MANIFOLD_NO_FILESYSTEM)
 endif()
 
 target_include_directories(

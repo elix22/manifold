@@ -21,6 +21,7 @@ html {
 body {
   margin: 0;
   height: 100%;
+  overflow: hidden;
   font-family: 'Rubik', sans-serif;
   font-size: 24px;
   line-height: 24px;
@@ -90,7 +91,7 @@ model-viewer {
   position: relative;
   flex: 3;
   width: 100%;
-  background-color: #ddd;
+  background-color: #fff;
 }
 
 #console {
@@ -100,7 +101,7 @@ model-viewer {
   max-height: none;
   /* draggable pane dividers-end */
   overflow-y: scroll;
-  background-color: #eee;
+  background-color: #fff;
   white-space: pre-wrap;
   font-size: 14px;
   font-weight: 100;
@@ -157,7 +158,7 @@ model-viewer {
 
 .splitter {
   flex: 0 0 8px;
-  background: #d0d0d0;
+  background: #d8c5e5;
   touch-action: none;
 }
 
@@ -183,6 +184,10 @@ model-viewer {
   transform: translate3d(-50%, -50%, 0);
 }
 
+.header {
+  background-color: #A288B3;
+}
+
 .header .margin {
   font-size: 16px;
   margin: 8px;
@@ -193,7 +198,7 @@ model-viewer {
   position: absolute;
   z-index: 1;
   width: 100%;
-  max-height: 80vh;
+  max-height: 85dvh;
   overflow: auto;
     /* Scrollbar styles for Firefox */
   scrollbar-width: thin;
@@ -421,7 +426,7 @@ model-viewer {
 
 #play {
   position: relative;
-  background-color: #ccc;
+  background-color: #0004;
   margin: 8px;
 }
 
@@ -433,7 +438,7 @@ model-viewer {
   height: 10px;
   border-radius: 5px;
   margin-right: 16px;
-  background: #ffffff55;
+  background: #0002;
   outline: none;
 }
 
@@ -443,7 +448,7 @@ model-viewer {
   width: 25px;
   height: 25px;
   border-radius: 50%;
-  background: #ccc;
+  background: #0004;
   cursor: pointer;
 }
 

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "gtest/gtest.h"
 #include "manifold/manifold.h"
 #include "test.h"
 
@@ -164,22 +165,33 @@ TEST(SDF, Resize) {
 }
 
 TEST(SDF, SineSurface) {
-  Manifold surface =
-      Manifold::LevelSet(
-          [](vec3 p) {
-            double mid = la::sin(p.x) + la::sin(p.y);
-            return (p.z > mid - 0.5 && p.z < mid + 0.5) ? 1.0f : -1.0f;
-          },
-          {vec3(-1.75 * kPi), vec3(1.75 * kPi)}, 1)
-          .Simplify();
-  Manifold smoothed = surface.SmoothOut(180).RefineToLength(0.05);
+  Manifold surface = Manifold::LevelSet(
+      [](vec3 p) {
+        double mid = la::sin(p.x) + la::sin(p.y);
+        return (p.z > mid - 0.5 && p.z < mid + 0.5) ? 1.0f : -1.0f;
+      },
+      {vec3(-1.75 * kPi), vec3(1.75 * kPi)}, 1);
 
-  EXPECT_EQ(smoothed.Status(), Manifold::Error::NoError);
-  EXPECT_EQ(smoothed.Genus(), 38);
-  EXPECT_NEAR(smoothed.Volume(), 107.4, 0.1);
-  EXPECT_NEAR(smoothed.SurfaceArea(), 394.7, 0.1);
+  EXPECT_EQ(surface.Status(), Manifold::Error::NoError);
+  EXPECT_EQ(surface.Genus(), 38);
+  EXPECT_NEAR(surface.Volume(), 102.4, 0.1);
+  EXPECT_NEAR(surface.SurfaceArea(), 392.4, 0.1);
 
-  if (options.exportModels) WriteTestOBJ("sinesurface.obj", smoothed);
+  if (options.exportModels) WriteTestOBJ("sinesurface.obj", surface);
+}
+
+TEST(SDF, Determinism) {
+  const auto gyroid = [](vec3 p) {
+    return la::sin(p.x) * la::cos(p.y) + la::sin(p.y) * la::cos(p.z) +
+           la::sin(p.z) * la::cos(p.x);
+  };
+  const Box bounds = {vec3(-10), vec3(10)};
+  const MeshGL first = Manifold::LevelSet(gyroid, bounds, 1.0).GetMeshGL();
+  for (int i = 0; i < 10; ++i) {
+    const MeshGL mesh = Manifold::LevelSet(gyroid, bounds, 1.0).GetMeshGL();
+    ASSERT_EQ(mesh.vertProperties, first.vertProperties);
+    ASSERT_EQ(mesh.triVerts, first.triVerts);
+  }
 }
 
 TEST(SDF, Blobs) {

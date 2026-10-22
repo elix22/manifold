@@ -1,10 +1,13 @@
 // vite.config.js
 import {resolve} from 'path'
 import {defineConfig} from 'vite'
+import viteBundleAnalyzer from 'vite-bundle-analyzer';
 import {viteStaticCopy} from 'vite-plugin-static-copy'
 
 export default defineConfig({
   worker: {format: 'es'},
+  // Relative so a build works from any path.
+  base: './',
   server: {
     // `npm run dev`
     headers: {
@@ -20,20 +23,23 @@ export default defineConfig({
       'Cross-Origin-Opener-Policy': 'same-origin',
     },
   },
-  plugins: [viteStaticCopy({
-    targets: [
-      // If type declaration files are missing, the web editor can't
-      // load them, and type validation won't work for our core modules.
-      {
-        src: './node_modules/manifold-3d/dist/manifoldCAD.d.ts',
-        dest: './',  // Targets are relative to 'dist'.
-      },
-      {
-        src: './node_modules/manifold-3d/dist/manifoldCADGlobals.d.ts',
-        dest: './',
-      }
-    ],
-  })],
+  plugins: [
+    viteStaticCopy({
+      targets: [
+        // If type declaration files are missing, the web editor can't
+        // load them, and type validation won't work for our core modules.
+        {
+          src: './node_modules/manifold-3d/dist/manifoldCAD.d.ts',
+          dest: './',  // Targets are relative to 'dist'.
+        },
+        {
+          src: './node_modules/manifold-3d/dist/manifoldCADGlobals.d.ts',
+          dest: './',
+        }
+      ],
+    }),
+    process.env.ANALYZE ? viteBundleAnalyzer() : null
+  ].filter(Boolean),
   resolve: {
     alias: {
       path: resolve(

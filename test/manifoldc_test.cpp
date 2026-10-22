@@ -1,10 +1,13 @@
 #include "manifold/manifoldc.h"
 
 #include <cmath>
+#ifndef MANIFOLD_NO_IOSTREAM
 #include <fstream>
+#endif
 
 #include "gtest/gtest.h"
 #include "manifold/types.h"
+#include "manifold/version.h"
 #include "test.h"
 
 void* alloc_manifold_buffer() { return malloc(manifold_manifold_size()); }
@@ -25,6 +28,15 @@ void* alloc_polygons_buffer() { return malloc(manifold_polygons_size()); }
 
 void* alloc_manifold_vec_buffer() {
   return malloc(manifold_manifold_vec_size());
+}
+
+TEST(CBIND, version) {
+  int version[3];
+  manifold_version(version);
+
+  EXPECT_EQ(version[0], MANIFOLD_VERSION_MAJOR);
+  EXPECT_EQ(version[1], MANIFOLD_VERSION_MINOR);
+  EXPECT_EQ(version[2], MANIFOLD_VERSION_PATCH);
 }
 
 TEST(CBIND, sphere) {
@@ -140,6 +152,7 @@ TEST(CBIND, include_pt_mutates_bounds) {
   free(box);
 }
 
+#ifndef MANIFOLD_NO_IOSTREAM
 TEST(CBIND, obj_round_trip) {
   ManifoldManifold* cube =
       manifold_cube(alloc_manifold_buffer(), 1.0, 1.0, 1.0, 1);
@@ -162,6 +175,7 @@ TEST(CBIND, obj_round_trip) {
   free(result);
   free(buffer);
 }
+#endif
 
 TEST(CBIND, level_set) {
   // can't convert lambda with captures to funptr
@@ -205,6 +219,7 @@ TEST(CBIND, level_set) {
   ManifoldMeshGL* sdf_mesh =
       manifold_get_meshgl(alloc_meshgl_buffer(), sdf_man);
 
+#ifndef MANIFOLD_NO_IOSTREAM
   if (options.exportModels) {
     manifold_write_obj(
         sdf_man,
@@ -215,6 +230,7 @@ TEST(CBIND, level_set) {
         },
         NULL);
   }
+#endif
 
   EXPECT_EQ(manifold_status(sdf_man), MANIFOLD_NO_ERROR);
   EXPECT_EQ(manifold_status(sdf_man_context), MANIFOLD_NO_ERROR);
@@ -248,6 +264,66 @@ TEST(CBIND, level_set) {
   free(sdf_man_context);
   free(bounds);
   free(context);
+}
+
+TEST(CBIND, execution_context_factories) {
+  double (*sdf)(double, double, double, void*) = [](double x, double y,
+                                                    double z, void*) {
+    return 15.0 - sqrtf(x * x + y * y + z * z);
+  };
+  const double bb = 30;
+  ManifoldBox* bounds =
+      manifold_box(alloc_box_buffer(), -bb, -bb, -bb, bb, bb, bb);
+
+  // LevelSet under an ExecutionContext: runs to completion, progress hits 1.
+  ManifoldExecutionContext* ec =
+      manifold_execution_context(malloc(manifold_execution_context_size()));
+  ManifoldManifold* sdf_man = manifold_execution_context_level_set(
+      alloc_manifold_buffer(), ec, sdf, bounds, 0.5, 0, -1, NULL);
+  EXPECT_EQ(manifold_status(sdf_man), MANIFOLD_NO_ERROR);
+  EXPECT_FALSE(manifold_execution_context_cancelled(ec));
+  EXPECT_DOUBLE_EQ(manifold_execution_context_progress(ec), 1.0);
+
+  // FromMeshGL under an ExecutionContext: round-trip a cube's mesh.
+  ManifoldManifold* cube =
+      manifold_cube(alloc_manifold_buffer(), 2.0, 2.0, 2.0, 1);
+  ManifoldMeshGL* mesh = manifold_get_meshgl(alloc_meshgl_buffer(), cube);
+  ManifoldExecutionContext* ec2 =
+      manifold_execution_context(malloc(manifold_execution_context_size()));
+  ManifoldManifold* ingested =
+      manifold_execution_context_of_meshgl(alloc_manifold_buffer(), ec2, mesh);
+  EXPECT_EQ(manifold_status(ingested), MANIFOLD_NO_ERROR);
+  EXPECT_DOUBLE_EQ(manifold_execution_context_progress(ec2), 1.0);
+
+  // A pre-cancelled ctx must propagate through the factory. This is what
+  // distinguishes the ctx factory from the plain one: NoError + progress==1
+  // alone would also pass if the binding bypassed the ctx (a fresh ctx reads
+  // progress 1.0), so assert the cancel actually lands.
+  ManifoldExecutionContext* ec3 =
+      manifold_execution_context(malloc(manifold_execution_context_size()));
+  manifold_execution_context_cancel(ec3);
+  ManifoldManifold* cancelled = manifold_execution_context_level_set(
+      alloc_manifold_buffer(), ec3, sdf, bounds, 0.5, 0, -1, NULL);
+  EXPECT_EQ(manifold_status(cancelled), MANIFOLD_CANCELLED);
+
+  manifold_destruct_execution_context(ec);
+  manifold_destruct_execution_context(ec2);
+  manifold_destruct_execution_context(ec3);
+  manifold_destruct_manifold(sdf_man);
+  manifold_destruct_manifold(cube);
+  manifold_destruct_manifold(ingested);
+  manifold_destruct_manifold(cancelled);
+  manifold_destruct_meshgl(mesh);
+  manifold_destruct_box(bounds);
+  free(ec);
+  free(ec2);
+  free(ec3);
+  free(sdf_man);
+  free(bounds);
+  free(cube);
+  free(mesh);
+  free(ingested);
+  free(cancelled);
 }
 
 TEST(CBIND, level_set_64) {
@@ -525,17 +601,38 @@ TEST(CBIND, meshgl64_merge_returns_mem) {
   free(cube);
 }
 
-TEST(CBIND, tolerance) {
+TEST(CBIND, ray_cast) {
+  ManifoldManifold* cube =
+      manifold_cube(alloc_manifold_buffer(), 1.0, 1.0, 1.0, 1);
+
+  void* mem = malloc(manifold_ray_hit_vec_size());
+  ManifoldRayHitVec* hits =
+      manifold_ray_cast(mem, cube, 0.0, 0.0, -5.0, 0.0, 0.0, 5.0);
+  ASSERT_EQ(manifold_ray_hit_vec_length(hits), 2);
+  ManifoldRayHit h0 = manifold_ray_hit_vec_get(hits, 0);
+  ManifoldRayHit h1 = manifold_ray_hit_vec_get(hits, 1);
+  EXPECT_FLOAT_EQ(h0.position.z, -0.5);
+  EXPECT_FLOAT_EQ(h0.normal.z, -1.0);
+  EXPECT_FLOAT_EQ(h1.position.z, 0.5);
+  EXPECT_FLOAT_EQ(h1.normal.z, 1.0);
+  EXPECT_EQ(h0.crossing, 1);
+  EXPECT_EQ(h1.crossing, -1);
+  manifold_destruct_ray_hit_vec(hits);
+  free(mem);
+
+  void* mem2 = malloc(manifold_ray_hit_vec_size());
+  ManifoldRayHitVec* miss =
+      manifold_ray_cast(mem2, cube, 10.0, 10.0, -5.0, 10.0, 10.0, 5.0);
+  EXPECT_EQ(manifold_ray_hit_vec_length(miss), 0);
+  manifold_destruct_ray_hit_vec(miss);
+  free(mem2);
+
+  manifold_destruct_manifold(cube);
+  free(cube);
+}
+
+TEST(CBIND, simplify_smoke) {
   ManifoldManifold* sphere = manifold_sphere(alloc_manifold_buffer(), 1.0, 100);
-
-  // GetTolerance should return a non-negative value.
-  double tol = manifold_get_tolerance(sphere);
-  EXPECT_GE(tol, 0.0);
-
-  // SetTolerance should be reflected by GetTolerance.
-  ManifoldManifold* with_tol =
-      manifold_set_tolerance(alloc_manifold_buffer(), sphere, 0.5);
-  EXPECT_EQ(manifold_get_tolerance(with_tol), 0.5);
 
   // Simplify should produce a valid manifold with fewer or equal triangles.
   ManifoldManifold* simplified =
@@ -544,10 +641,8 @@ TEST(CBIND, tolerance) {
   EXPECT_LE(manifold_num_tri(simplified), manifold_num_tri(sphere));
 
   manifold_destruct_manifold(sphere);
-  manifold_destruct_manifold(with_tol);
   manifold_destruct_manifold(simplified);
   free(sphere);
-  free(with_tol);
   free(simplified);
 }
 
@@ -569,13 +664,13 @@ TEST(CBIND, meshgl_run_accessors) {
   ManifoldManifold* cube_tmp =
       manifold_cube(alloc_manifold_buffer(), 1, 1, 1, 0);
   ManifoldManifold* cube =
-      manifold_as_original(alloc_manifold_buffer(), cube_tmp);
+      manifold_as_original(alloc_manifold_buffer(), cube_tmp, -1);
   ManifoldManifold* sphere_tmp =
       manifold_sphere(alloc_manifold_buffer(), 0.6, 32);
   ManifoldManifold* sphere_trans =
       manifold_translate(alloc_manifold_buffer(), sphere_tmp, 0.5, 0.5, 0.5);
   ManifoldManifold* sphere =
-      manifold_as_original(alloc_manifold_buffer(), sphere_trans);
+      manifold_as_original(alloc_manifold_buffer(), sphere_trans, -1);
   ManifoldManifold* result =
       manifold_union(alloc_manifold_buffer(), cube, sphere);
   EXPECT_EQ(manifold_status(result), MANIFOLD_NO_ERROR);
@@ -625,43 +720,170 @@ TEST(CBIND, meshgl_run_accessors) {
   free(cube_tmp);
 }
 
-TEST(CBIND, meshgl_update_normals) {
-  // Get a mesh with normals, then verify UpdateNormals doesn't corrupt it.
-  ManifoldManifold* cube =
-      manifold_cube(alloc_manifold_buffer(), 1.0, 1.0, 1.0, 0);
+TEST(CBIND, run_flag_accessors) {
+  // CalculateNormals sets the per-run hasNormals bit; a subtractee cavity
+  // gets backside set. Exercise the C accessors for both bits.
+  ManifoldManifold* cube = manifold_as_original(
+      alloc_manifold_buffer(),
+      manifold_cube(alloc_manifold_buffer(), 2.0, 2.0, 2.0, 1), -1);
+  ManifoldManifold* sphere = manifold_as_original(
+      alloc_manifold_buffer(),
+      manifold_sphere(alloc_manifold_buffer(), 1.0, 32), -1);
+  ManifoldManifold* cut =
+      manifold_difference(alloc_manifold_buffer(), cube, sphere);
   ManifoldManifold* with_normals =
-      manifold_calculate_normals(alloc_manifold_buffer(), cube, 3, 60.0);
-  EXPECT_EQ(manifold_status(with_normals), MANIFOLD_NO_ERROR);
-
-  // MeshGL with normals at channel 3
+      manifold_calculate_normals(alloc_manifold_buffer(), cut, 0, 60.0);
   ManifoldMeshGL* mesh =
-      manifold_get_meshgl_w_normals(alloc_meshgl_buffer(), with_normals, 3);
-  size_t tri_before = manifold_meshgl_num_tri(mesh);
-  manifold_meshgl_update_normals(mesh, 3);
-  EXPECT_EQ(manifold_meshgl_num_tri(mesh), tri_before);
+      manifold_get_meshgl(alloc_meshgl_buffer(), with_normals);
 
-  // Verify the mesh is still valid by constructing a Manifold from it.
-  ManifoldManifold* rebuilt = manifold_of_meshgl(alloc_manifold_buffer(), mesh);
-  EXPECT_EQ(manifold_status(rebuilt), MANIFOLD_NO_ERROR);
+  const size_t runs = manifold_meshgl_num_run(mesh);
+  ASSERT_GE(runs, 2u);
 
-  // MeshGL64 same test
-  ManifoldMeshGL64* mesh64 =
-      manifold_get_meshgl64_w_normals(alloc_meshgl64_buffer(), with_normals, 3);
-  manifold_meshgl64_update_normals(mesh64, 3);
-  ManifoldManifold* rebuilt64 =
-      manifold_of_meshgl64(alloc_manifold_buffer(), mesh64);
-  EXPECT_EQ(manifold_status(rebuilt64), MANIFOLD_NO_ERROR);
+  int backside_count = 0;
+  int has_normals_count = 0;
+  for (size_t r = 0; r < runs; ++r) {
+    if (manifold_meshgl_backside(mesh, r)) ++backside_count;
+    if (manifold_meshgl_has_normals(mesh, r)) ++has_normals_count;
+  }
+  EXPECT_EQ(backside_count, 1);
+  EXPECT_EQ(has_normals_count, static_cast<int>(runs));
 
-  manifold_destruct_manifold(rebuilt64);
-  manifold_destruct_meshgl64(mesh64);
-  manifold_destruct_manifold(rebuilt);
+  // Out-of-range returns false.
+  EXPECT_EQ(manifold_meshgl_backside(mesh, runs + 10), 0);
+  EXPECT_EQ(manifold_meshgl_has_normals(mesh, runs + 10), 0);
+
   manifold_destruct_meshgl(mesh);
   manifold_destruct_manifold(with_normals);
+  manifold_destruct_manifold(cut);
+  manifold_destruct_manifold(sphere);
   manifold_destruct_manifold(cube);
-  free(rebuilt64);
-  free(mesh64);
-  free(rebuilt);
   free(mesh);
   free(with_normals);
+  free(cut);
+  free(sphere);
   free(cube);
+}
+
+TEST(CBIND, cross_section_even_odd) {
+  // Two same-direction squares, one nested in the other: positive fill leaves
+  // the pair solid, even-odd cuts the inner square out.
+  ManifoldVec2 outerPts[] = {{-2, -2}, {2, -2}, {2, 2}, {-2, 2}};
+  ManifoldVec2 innerPts[] = {{-1, -1}, {1, -1}, {1, 1}, {-1, 1}};
+  ManifoldSimplePolygon* outer =
+      manifold_simple_polygon(alloc_simple_polygon_buffer(), outerPts, 4);
+  ManifoldSimplePolygon* inner =
+      manifold_simple_polygon(alloc_simple_polygon_buffer(), innerPts, 4);
+  ManifoldSimplePolygon* sps[] = {outer, inner};
+  ManifoldPolygons* ps = manifold_polygons(alloc_polygons_buffer(), sps, 2);
+
+  ManifoldCrossSection* positive = manifold_cross_section_of_polygons(
+      malloc(manifold_cross_section_size()), ps);
+  ManifoldCrossSection* evenOdd = manifold_cross_section_even_odd_polygons(
+      malloc(manifold_cross_section_size()), ps);
+  EXPECT_NEAR(manifold_cross_section_area(positive), 16.0, 1e-9);
+  EXPECT_NEAR(manifold_cross_section_area(evenOdd), 12.0, 1e-9);
+
+  // The single-contour entry point, on a clockwise square: even-odd goes by
+  // parity so it fills, while positive fill discards the negative winding.
+  ManifoldVec2 cwPts[] = {{0, 0}, {0, 2}, {2, 2}, {2, 0}};
+  ManifoldSimplePolygon* cw =
+      manifold_simple_polygon(alloc_simple_polygon_buffer(), cwPts, 4);
+  ManifoldCrossSection* cwPositive = manifold_cross_section_of_simple_polygon(
+      malloc(manifold_cross_section_size()), cw);
+  ManifoldCrossSection* cwEvenOdd =
+      manifold_cross_section_even_odd_simple_polygon(
+          malloc(manifold_cross_section_size()), cw);
+  EXPECT_NEAR(manifold_cross_section_area(cwPositive), 0.0, 1e-9);
+  EXPECT_NEAR(manifold_cross_section_area(cwEvenOdd), 4.0, 1e-9);
+
+  manifold_destruct_simple_polygon(outer);
+  manifold_destruct_simple_polygon(inner);
+  manifold_destruct_simple_polygon(cw);
+  manifold_destruct_polygons(ps);
+  manifold_destruct_cross_section(positive);
+  manifold_destruct_cross_section(evenOdd);
+  manifold_destruct_cross_section(cwPositive);
+  manifold_destruct_cross_section(cwEvenOdd);
+  free(outer);
+  free(inner);
+  free(cw);
+  free(ps);
+  free(positive);
+  free(evenOdd);
+  free(cwPositive);
+  free(cwEvenOdd);
+}
+
+// Smoke test for the manifold_alloc_* + manifold_delete_* pattern. The
+// rest of this file covers the malloc + manifold_destruct_* + free
+// pattern; this one fills in the alloc/delete variant (used by
+// language bindings that let the library manage memory).
+TEST(CBIND, alloc_delete_roundtrip) {
+  for (int i = 0; i < 10; ++i) {
+    ManifoldManifold* m = manifold_alloc_manifold();
+    manifold_cube(m, 1.0, 1.0, 1.0, 0);
+    EXPECT_EQ(manifold_status(m), MANIFOLD_NO_ERROR);
+    manifold_delete_manifold(m);
+  }
+  for (int i = 0; i < 10; ++i) {
+    ManifoldCrossSection* cs = manifold_alloc_cross_section();
+    manifold_cross_section_square(cs, 1.0, 1.0, 0);
+    manifold_delete_cross_section(cs);
+  }
+}
+
+TEST(CBIND, execution_context_happy_path) {
+  // malloc + destruct + free pattern (matches most other tests in this file).
+  ManifoldExecutionContext* ctx =
+      manifold_execution_context(malloc(manifold_execution_context_size()));
+  EXPECT_EQ(manifold_execution_context_cancelled(ctx), 0);
+  // Fresh ctx with no scheduled work reads as trivially complete (1.0).
+  EXPECT_DOUBLE_EQ(manifold_execution_context_progress(ctx), 1.0);
+
+  // Uncancelled ctx attached to a manifold means Status routes through ctx.
+  ManifoldManifold* cube1 = manifold_cube(alloc_manifold_buffer(), 1, 1, 1, 0);
+  ManifoldManifold* cube2 = manifold_cube(alloc_manifold_buffer(), 1, 1, 1, 1);
+  ManifoldManifold* u = manifold_union(alloc_manifold_buffer(), cube1, cube2);
+  ManifoldManifold* uctx =
+      manifold_with_context(alloc_manifold_buffer(), u, ctx);
+  EXPECT_EQ(manifold_status(uctx), MANIFOLD_NO_ERROR);
+  EXPECT_EQ(manifold_execution_context_cancelled(ctx), 0);
+
+  manifold_destruct_manifold(uctx);
+  manifold_destruct_manifold(u);
+  manifold_destruct_manifold(cube2);
+  manifold_destruct_manifold(cube1);
+  manifold_destruct_execution_context(ctx);
+  free(uctx);
+  free(u);
+  free(cube2);
+  free(cube1);
+  free(ctx);
+}
+
+TEST(CBIND, execution_context_cancel) {
+  // alloc + delete pattern (matches the Rust binding's usage of the C API).
+  ManifoldExecutionContext* ctx =
+      manifold_execution_context(manifold_alloc_execution_context());
+  manifold_execution_context_cancel(ctx);
+  EXPECT_EQ(manifold_execution_context_cancelled(ctx), 1);
+
+  // Status on a Manifold that needs evaluation, with the cancelled ctx
+  // attached, short-circuits to MANIFOLD_CANCELLED.
+  ManifoldManifold* cube1 = manifold_cube(alloc_manifold_buffer(), 1, 1, 1, 0);
+  ManifoldManifold* cube2 = manifold_cube(alloc_manifold_buffer(), 1, 1, 1, 1);
+  ManifoldManifold* u = manifold_union(alloc_manifold_buffer(), cube1, cube2);
+  ManifoldManifold* uctx =
+      manifold_with_context(alloc_manifold_buffer(), u, ctx);
+  EXPECT_EQ(manifold_status(uctx), MANIFOLD_CANCELLED);
+
+  manifold_destruct_manifold(uctx);
+  manifold_destruct_manifold(u);
+  manifold_destruct_manifold(cube2);
+  manifold_destruct_manifold(cube1);
+  free(uctx);
+  free(u);
+  free(cube2);
+  free(cube1);
+  manifold_delete_execution_context(ctx);
 }

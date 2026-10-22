@@ -81,13 +81,10 @@ EMSCRIPTEN_BINDINGS(whatever) {
       .value("TransformWrongLength", Manifold::Error::TransformWrongLength)
       .value("RunIndexWrongLength", Manifold::Error::RunIndexWrongLength)
       .value("FaceIDWrongLength", Manifold::Error::FaceIDWrongLength)
-      .value("InvalidConstruction", Manifold::Error::InvalidConstruction);
-
-  enum_<CrossSection::FillRule>("fillrule")
-      .value("EvenOdd", CrossSection::FillRule::EvenOdd)
-      .value("NonZero", CrossSection::FillRule::NonZero)
-      .value("Positive", CrossSection::FillRule::Positive)
-      .value("Negative", CrossSection::FillRule::Negative);
+      .value("InvalidConstruction", Manifold::Error::InvalidConstruction)
+      .value("ResultTooLarge", Manifold::Error::ResultTooLarge)
+      .value("InvalidTangents", Manifold::Error::InvalidTangents)
+      .value("Cancelled", Manifold::Error::Cancelled);
 
   enum_<CrossSection::JoinType>("jointype")
       .value("Square", CrossSection::JoinType::Square)
@@ -98,18 +95,30 @@ EMSCRIPTEN_BINDINGS(whatever) {
   value_object<Rect>("rect").field("min", &Rect::min).field("max", &Rect::max);
   value_object<Box>("box").field("min", &Box::min).field("max", &Box::max);
 
-  value_object<Smoothness>("smoothness")
-      .field("halfedge", &Smoothness::halfedge)
-      .field("smoothness", &Smoothness::smoothness);
+  value_object<RayHit>("rayHit")
+      .field("faceID", &RayHit::faceID)
+      .field("distance", &RayHit::distance)
+      .field("position", &RayHit::position)
+      .field("normal", &RayHit::normal)
+      .field("crossing", &RayHit::crossing);
 
+  class_<ExecutionContext>("ExecutionContext")
+      .constructor<>()
+      .function("cancel", &ExecutionContext::Cancel)
+      .function("cancelled", &ExecutionContext::Cancelled)
+      .function("progress", &ExecutionContext::Progress)
+      .function("_FromMesh", &man_js::ExecutionContextFromMesh)
+      .function("_LevelSet", &man_js::ExecutionContextLevelSet);
+
+  register_vector<RayHit>("Vector_rayHit");
   register_vector<ivec3>("Vector_ivec3");
   register_vector<vec3>("Vector_vec3");
   register_vector<vec2>("Vector_vec2");
   register_vector<std::vector<vec2>>("Vector2_vec2");
   register_vector<double>("Vector_f64");
+  register_vector<int>("Vector_i32");
   register_vector<CrossSection>("Vector_crossSection");
   register_vector<Manifold>("Vector_manifold");
-  register_vector<Smoothness>("Vector_smoothness");
   register_vector<vec4>("Vector_vec4");
 
   class_<CrossSection>("CrossSection")
@@ -136,16 +145,16 @@ EMSCRIPTEN_BINDINGS(whatever) {
                 select_overload<CrossSection() const>(&CrossSection::Hull));
 
   // CrossSection Static Methods
+  function("_EvenOdd", &cross_js::EvenOdd);
   function("_Square", &CrossSection::Square);
   function("_Circle", &CrossSection::Circle);
-  function("_crossSectionCompose", &CrossSection::Compose);
   function("_crossSectionUnionN", &cross_js::UnionN);
   function("_crossSectionDifferenceN", &cross_js::DifferenceN);
   function("_crossSectionIntersectionN", &cross_js::IntersectionN);
   function("_crossSectionCollectVertices", &cross_js::CollectVertices);
-  function(
-      "_crossSectionHullPoints",
-      select_overload<CrossSection(std::vector<vec2>)>(&CrossSection::Hull));
+  function("_crossSectionHullPoints",
+           select_overload<CrossSection(const std::vector<vec2>&)>(
+               &CrossSection::Hull));
 
   class_<Manifold>("Manifold")
       .constructor(&man_js::FromMeshJS)
@@ -164,8 +173,7 @@ EMSCRIPTEN_BINDINGS(whatever) {
       .function("refine", &Manifold::Refine)
       .function("refineToLength", &Manifold::RefineToLength)
       .function("refineToTolerance", &Manifold::RefineToTolerance)
-      .function("smoothByNormals", &Manifold::SmoothByNormals)
-      .function("_SmoothOut", &Manifold::SmoothOut)
+      .function("_SmoothByNormals", &Manifold::SmoothByNormals)
       .function("_Warp", &man_js::Warp)
       .function("_WarpBatch", &man_js::WarpBatch)
       .function("_SetProperties", &man_js::SetProperties)
@@ -178,19 +186,20 @@ EMSCRIPTEN_BINDINGS(whatever) {
                                   &Manifold::Decompose))
       .function("isEmpty", &Manifold::IsEmpty)
       .function("status", &man_js::Status)
+      .function("withContext", &Manifold::WithContext)
       .function("numVert", &Manifold::NumVert)
       .function("numEdge", &Manifold::NumEdge)
       .function("numTri", &Manifold::NumTri)
       .function("numProp", &Manifold::NumProp)
       .function("numPropVert", &Manifold::NumPropVert)
       .function("_boundingBox", &Manifold::BoundingBox)
-      .function("tolerance", &Manifold::GetTolerance)
-      .function("setTolerance", &Manifold::SetTolerance)
       .function("_Simplify", &Manifold::Simplify)
       .function("genus", &Manifold::Genus)
       .function("volume", &Manifold::Volume)
       .function("surfaceArea", &Manifold::SurfaceArea)
       .function("minGap", &Manifold::MinGap)
+      .function("_RayCast", &man_js::RayCast)
+      .function("_WindingNumber", &Manifold::WindingNumber)
       .function("calculateCurvature", &Manifold::CalculateCurvature)
       .function("_CalculateNormals", &Manifold::CalculateNormals)
       .function("originalID", &Manifold::OriginalID)
@@ -201,7 +210,6 @@ EMSCRIPTEN_BINDINGS(whatever) {
   function("_Cylinder", &Manifold::Cylinder);
   function("_Sphere", &Manifold::Sphere);
   function("_Tetrahedron", &Manifold::Tetrahedron);
-  function("_Smooth", &js::Smooth);
   function("_Extrude", &Manifold::Extrude);
   function("_Triangulate", &Triangulate);
   function("_Revolve", &Manifold::Revolve);
@@ -218,6 +226,8 @@ EMSCRIPTEN_BINDINGS(whatever) {
       select_overload<Manifold(const std::vector<vec3>&)>(&Manifold::Hull));
 
   // Quality Globals
+  function("setRelativePrecision", &Quality::SetRelativePrecision);
+  function("getRelativePrecision", &Quality::GetRelativePrecision);
   function("setMinCircularAngle", &Quality::SetMinCircularAngle);
   function("setMinCircularEdgeLength", &Quality::SetMinCircularEdgeLength);
   function("setCircularSegments", &Quality::SetCircularSegments);
