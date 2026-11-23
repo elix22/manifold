@@ -166,6 +166,10 @@ Module.setup = function() {
   Module.CrossSection.prototype.extrude = function(
       height, nDivisions = 0, twistDegrees = 0.0, scaleTop = [1.0, 1.0],
       center = false) {
+    // if only one factor provided, scale both x and y with it
+    if (typeof scaleTop == 'number') {
+      scaleTop = [scaleTop, scaleTop];
+    }
     scaleTop = vararg2vec2([scaleTop]);
     const polygonsVec = this._ToPolygons();
     const man = Module._Extrude(
@@ -248,13 +252,12 @@ Module.setup = function() {
     return out;
   };
 
-  Module.Manifold.prototype.calculateNormals = function(
-      normalIdx = 0, minSharpAngle = 52.5) {
-    return this._CalculateNormals(normalIdx, minSharpAngle);
+  Module.Manifold.prototype.calculateNormals = function(minSharpAngle = 52.5) {
+    return this._CalculateNormals(minSharpAngle);
   };
 
-  Module.Manifold.prototype.smoothByNormals = function(normalIdx = 0) {
-    return this._SmoothByNormals(normalIdx);
+  Module.Manifold.prototype.smoothByNormals = function() {
+    return this._SmoothByNormals();
   };
 
   Module.Manifold.prototype.setProperties = function(numProp, func) {
@@ -340,6 +343,7 @@ Module.setup = function() {
     const vec = this._RayCast(vararg2vec3([origin]), vararg2vec3([endpoint]));
     const result =
         fromVec(vec, hit => ({
+                       originalID: hit.originalID,
                        faceID: hit.faceID,
                        distance: hit.distance,
                        position: ['x', 'y', 'z'].map(f => hit.position[f]),
@@ -396,8 +400,7 @@ Module.setup = function() {
       faceID,
       halfedgeTangent,
       runTransform,
-      runFlags,
-      tolerance = 0
+      runFlags
     } = {}) {
       this.numProp = numProp;
       this.triVerts = triVerts;
@@ -410,7 +413,6 @@ Module.setup = function() {
       this.halfedgeTangent = halfedgeTangent;
       this.runTransform = runTransform;
       this.runFlags = runFlags;
-      this.tolerance = tolerance;
     }
 
     get numTri() {
@@ -425,10 +427,8 @@ Module.setup = function() {
       return this.runOriginalID.length;
     }
 
-    merge() {
-      const {changed, mesh} = Module._Merge(this);
-      Object.assign(this, {...mesh});
-      return changed;
+    merge(tolerance = 0) {
+      return new Mesh(Module._Merge(this, tolerance));
     }
 
     verts(tri) {
@@ -473,8 +473,8 @@ Module.setup = function() {
 
   Module.Mesh = Mesh;
 
-  Module.Manifold.prototype.getMesh = function(normalIdx = -1) {
-    return new Mesh(this._GetMeshJS(normalIdx));
+  Module.Manifold.prototype.getMesh = function() {
+    return new Mesh(this._GetMeshJS());
   };
 
   Module.ManifoldError = function ManifoldError(code, ...args) {
@@ -549,6 +549,13 @@ Module.setup = function() {
   Module.CrossSection.evenOdd = function(polygons) {
     const polygonsVec = polygons2vec(polygons);
     const cs = Module._EvenOdd(polygonsVec);
+    polygonsVec.delete();
+    return cs;
+  };
+
+  Module.CrossSection.nonZero = function(polygons) {
+    const polygonsVec = polygons2vec(polygons);
+    const cs = Module._NonZero(polygonsVec);
     polygonsVec.delete();
     return cs;
   };
@@ -701,10 +708,6 @@ Module.setup = function() {
   }
 
   Module.Manifold.union = manifoldBatchbool('Union');
-  // Aliasing compose to union.
-  // Native compose has some issues, and is deprecated.
-  Module.Manifold.compose = Module.Manifold.union;
-
   Module.Manifold.difference = manifoldBatchbool('Difference');
   Module.Manifold.intersection = manifoldBatchbool('Intersection');
 

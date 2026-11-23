@@ -70,9 +70,8 @@ def all_manifold():
     m = Manifold.batch_hull([m, m.translate((0, 0, 1))])
     b = m.bounding_box()
     m = m.calculate_curvature(4, 5)
-    m = m.calculate_normals(0)
-    m = m.smooth_by_normals(0)
-    m = Manifold.compose([m, m.translate((5, 0, 0))])
+    m = m.calculate_normals()
+    m = m.smooth_by_normals()
     m = Manifold.cube((1, 1, 1))
     m = Manifold.cylinder(1, 1)
     ms = m.decompose()
@@ -136,7 +135,7 @@ def all_manifold():
     assert cancelled.status() == Error.Cancelled
     m = Manifold.tetrahedron()
     mesh = m.to_mesh()
-    ok = mesh.merge()
+    merged = mesh.merge()
     m = m.transform([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]])
     m = m.translate((0, 0, 0))
     m = m.trim_by_plane((0, 0, 1), 0)
@@ -146,7 +145,7 @@ def all_manifold():
     m2 = Manifold.cube().translate([2, 0, 0])
     d = m.min_gap(m2, 2)
     mesh2 = m.to_mesh64()
-    ok = mesh.merge()
+    merged = mesh2.merge()
 
 
 def run():

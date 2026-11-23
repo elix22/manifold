@@ -47,8 +47,6 @@ val MeshGL2JS(const MeshGL& mesh) {
   meshJS.set("runFlags",
              val(typed_memory_view(mesh.runFlags.size(), mesh.runFlags.data()))
                  .call<val>("slice"));
-  meshJS.set("tolerance", mesh.tolerance);
-
   return meshJS;
 }
 
@@ -87,24 +85,16 @@ MeshGL MeshJS2GL(const val& mesh) {
   if (mesh["runFlags"] != val::undefined()) {
     out.runFlags = convertJSArrayToNumberVector<uint8_t>(mesh["runFlags"]);
   }
-  if (mesh["tolerance"] != val::undefined()) {
-    out.tolerance = mesh["tolerance"].as<float>();
-  }
   return out;
 }
 
-val GetMeshJS(const Manifold& manifold, int normalIdx) {
-  MeshGL mesh = manifold.GetMeshGL(normalIdx);
+val GetMeshJS(const Manifold& manifold) {
+  MeshGL mesh = manifold.GetMeshGL();
   return MeshGL2JS(mesh);
 }
 
-val Merge(const val& mesh) {
-  val out = val::object();
-  MeshGL meshGL = MeshJS2GL(mesh);
-  bool changed = meshGL.Merge();
-  out.set("changed", changed);
-  out.set("mesh", changed ? MeshGL2JS(meshGL) : mesh);
-  return out;
+val Merge(const val& mesh, float tolerance) {
+  return MeshGL2JS(MeshJS2GL(mesh).Merge(tolerance));
 }
 
 }  // namespace js
@@ -116,6 +106,10 @@ CrossSection OfPolygons(std::vector<std::vector<vec2>> polygons) {
 
 CrossSection EvenOdd(std::vector<std::vector<vec2>> polygons) {
   return CrossSection::EvenOdd(polygons);
+}
+
+CrossSection NonZero(std::vector<std::vector<vec2>> polygons) {
+  return CrossSection::NonZero(polygons);
 }
 
 CrossSection Union(const CrossSection& a, const CrossSection& b) {

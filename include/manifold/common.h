@@ -136,7 +136,10 @@ inline double sind(double x) {
  *
  * @param x Angle in degrees.
  */
-inline double cosd(double x) { return sind(x + 90.0); }
+inline double cosd(double x) {
+  if (!la::isfinite(x)) return NAN;
+  return sind(90.0 - std::fmod(std::fabs(x), 360.0));
+}
 /** @} */
 
 /** @addtogroup Structs
@@ -164,8 +167,13 @@ using Polygons = std::vector<SimplePolygon>;
  * @brief Result of a ray cast query against a Manifold.
  */
 struct RayHit {
-  /// The triangle index that was hit.
-  uint64_t faceID = 0;
+  /// The originalID of the input mesh the hit triangle came from, as in
+  /// MeshGL::runOriginalID. It is 0 if that mesh was not tracked, e.g. a
+  /// primitive that never went through AsOriginal().
+  uint32_t originalID = 0;
+  /// The faceID the hit triangle got from its input mesh, as in
+  /// MeshGL::faceID. It is 0 if that mesh had no faceID.
+  uint32_t faceID = 0;
   /// The parametric distance along the ray segment in the closed interval
   /// [0, 1], where 0 is the origin and 1 is the endpoint. Hits exactly at
   /// the origin or endpoint are included.
@@ -179,7 +187,7 @@ struct RayHit {
   /// endpoint. Prefer this over the sign of dot(normal, direction), which
   /// can disagree with the mesh's internal crossing in degenerate cases.
   /// A ray grazing a vertex or edge can return a +1/-1 pair at the same
-  /// distance; such ties are ordered by faceID.
+  /// distance. Such ties are returned in a deterministic order.
   int crossing = 0;
 };
 
@@ -603,8 +611,10 @@ struct Rect {
    */
   constexpr Rect Transform(const mat2x3& m) const {
     Rect rect;
-    rect.min = m * vec3(min, 1);
-    rect.max = m * vec3(max, 1);
+    vec2 minT = m * vec3(min, 1);
+    vec2 maxT = m * vec3(max, 1);
+    rect.min = la::min(minT, maxT);
+    rect.max = la::max(minT, maxT);
     return rect;
   }
   ///@}
@@ -669,6 +679,8 @@ class Quality {
   static void SetMinCircularEdgeLength(double length);
   static void SetCircularSegments(int number);
   static double GetRelativePrecision();
+  static double GetMinCircularAngle();
+  static double GetMinCircularEdgeLength();
   static int GetCircularSegments(double radius);
   static void ResetToDefaults();
 };
@@ -700,9 +712,6 @@ struct ExecutionParams {
   /// Suppresses printed errors regarding CW triangles. Has no effect if
   /// processOverlaps is true.
   bool suppressErrors = false;
-  /// Deprecated! This value no longer has any effect, as cleanup now only
-  /// occurs on intersected triangles.
-  bool cleanupTriangles = true;
   /// Verbose level:
   /// - 0 for no verbose output
   /// - 1 for Boolean debug dumps on failures and invalid intermediate meshes.
